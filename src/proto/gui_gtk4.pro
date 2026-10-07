@@ -1,4 +1,4 @@
-/* gui_gtk4.c */
+// gui_gtk4.c
 void gui_mch_prepare(int *argc, char **argv);
 void gui_mch_free_all(void);
 int gui_mch_is_blinking(void);
@@ -42,18 +42,11 @@ void gui_gtk4_update_size(void);
 void gui_gtk4_add_multisign(cairo_surface_t *surf, int row, int col, int width, int height);
 void gui_mch_clear_block(int row1, int col1, int row2, int col2);
 void gui_mch_clear_all(void);
-void gui_gtk4_remove_image(win_T *wp);
-void gui_mch_free_popup_image(win_T *wp);
-bool gui_mch_update_popup_image_pixels(win_T *wp);
-void gui_mch_draw_popup_image(win_T *wp, int row, int col, int src_x, int src_y, int draw_w, int draw_h);
 void gui_mch_delete_lines(int row, int num_lines);
 void gui_mch_insert_lines(int row, int num_lines);
 void gui_gtk4_draw_cursor(guicolor_T bg, guicolor_T fg, int w, int h);
-void gui_mch_draw_hollow_cursor(guicolor_T color);
-void gui_mch_draw_part_cursor(int w, int h, guicolor_T color);
 void gui_mch_flash(int msec);
 void gui_mch_invert_rectangle(int r, int c, int nr, int nc);
-void gui_gtk4_resize(int width, int height);
 void gui_gtk_set_dnd_targets(void);
 void gui_mch_update(void);
 int gui_mch_wait_for_chars(long wtime);
@@ -78,7 +71,6 @@ void gui_mch_set_curtab(int nr);
 void gui_mch_drawsign(int row, int col, int typenr);
 void *gui_mch_register_sign(char_u *signfile);
 void gui_mch_destroy_sign(void *sign);
-int gui_gtk_draw_string_ext(int row, int col, char_u *s, int len, int flags, int force_pango);
 int gui_gtk_draw_string(int row, int col, char_u *s, int len, int flags);
 int gui_get_x11_windis(Window *win, Display **dis);
 void gui_gtk_set_mnemonics(int enable);
@@ -106,12 +98,19 @@ int gui_mch_get_scrollbar_ypadding(void);
 void gui_mch_create_scrollbar(scrollbar_T *sb, int orient);
 void gui_mch_destroy_scrollbar(scrollbar_T *sb);
 void gui_mch_set_text_area_pos(int x, int y, int w, int h);
-void gui_gtk_calculate_bleed(int width, int height);
+void gui_gtk4_calculate_bleed(int width, int height);
 char_u *gui_mch_browse(int saving, char_u *title, char_u *dflt, char_u *ext, char_u *initdir, char_u *filter);
 char_u *gui_mch_browsedir(char_u *title, char_u *initdir);
 int gui_mch_dialog(int type, char_u *title, char_u *message, char_u *buttons, int def_but, char_u *textfield, int ex_cmd);
 void gui_mch_find_dialog(exarg_T *eap);
 void gui_mch_replace_dialog(exarg_T *eap);
 void ex_helpfind(exarg_T *eap);
-void gui_gtk4_hardcopy(exarg_T *eap);
-/* vim: set ft=c : */
+char_u *gui_gtk4_print_dialog(prt_settings_T *psettings, char_u *jobname, double *page_width, double *page_height);
+void gui_gtk4_print_finish(void);
+int image_gui_init(image_T *img);
+void image_gui_uninit(image_T *img);
+int image_placement_gui_init(image_placement_T *place);
+void image_placement_gui_uninit(image_placement_T *place);
+void image_placement_gui_draw(image_placement_T *place);
+void image_placement_gui_clear(image_placement_T *place);
+// vim: ft=c

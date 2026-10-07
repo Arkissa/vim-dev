@@ -666,9 +666,11 @@ EXTERN char_u	*p_pvp;		// 'previewpopup'
 EXTERN char_u	*p_pdev;	// 'printdevice'
 # ifdef FEAT_POSTSCRIPT
 EXTERN char_u	*p_penc;	// 'printencoding'
-EXTERN char_u	*p_pexpr;	// 'printexpr'
 EXTERN char_u	*p_pmfn;	// 'printmbfont'
 EXTERN char_u	*p_pmcs;	// 'printmbcharset'
+# endif
+# if defined(FEAT_POSTSCRIPT) || defined(FEAT_PRINT_PANGO)
+EXTERN char_u	*p_pexpr;	// 'printexpr'
 # endif
 EXTERN char_u	*p_pfn;		// 'printfont'
 EXTERN char_u	*p_popt;	// 'printoptions'
@@ -686,7 +688,7 @@ EXTERN int	p_guipty;	// 'guipty'
 #if defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MSWIN)
 EXTERN char_u	*p_guiligatures;  // 'guiligatures'
 #endif
-#if defined(FEAT_GUI_GTK) || defined(FEAT_GUI_X11)
+#if (defined(FEAT_GUI_GTK) && !defined(USE_GTK4)) || defined(FEAT_GUI_X11)
 EXTERN long	p_ghr;		// 'guiheadroom'
 #endif
 #ifdef CURSOR_SHAPE
@@ -726,6 +728,9 @@ EXTERN char_u	*p_imak;	// 'imactivatekey'
 # define IM_ON_THE_SPOT		0L
 # define IM_OVER_THE_SPOT	1L
 EXTERN long	p_imst;		// 'imstyle'
+#endif
+#ifdef FEAT_IMAGE
+EXTERN char_u	*p_ipc;		// 'imageprotocol'
 #endif
 #if defined(FEAT_EVAL)
 EXTERN char_u	*p_imaf;	// 'imactivatefunc'

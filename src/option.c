@@ -323,7 +323,7 @@ set_init_default_printencoding(void)
 #endif
 }
 
-#ifdef FEAT_POSTSCRIPT
+#if defined(FEAT_POSTSCRIPT) || defined(FEAT_PRINT_PANGO)
 /*
  * Initialize the 'printexpr' option to a default value.
  */
@@ -494,6 +494,64 @@ set_init_expand_env(void)
     }
 }
 
+#if defined(MSWIN) && defined(FEAT_GETTEXT)
+/*
+ * Get the display language of Windows and the languages to fall back on, as a
+ * colon separated list for gettext, e.g. "ja_JP:en_US".  The list stops after
+ * English, untranslated messages are English already.
+ * Returns NULL when it cannot be obtained.  The result must be freed.
+ */
+    static char_u *
+get_ui_langs(void)
+{
+    ULONG	num_languages = 0;
+    ULONG	bufsize = 0;
+    WCHAR	*buffer;
+    char_u	*langs = NULL;
+
+    if (!GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &num_languages, NULL,
+								    &bufsize)
+	    || bufsize == 0)
+	return NULL;
+
+    buffer = ALLOC_MULT(WCHAR, bufsize);
+    if (buffer == NULL)
+	return NULL;
+
+    if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &num_languages, buffer,
+								    &bufsize))
+    {
+	// The list is NUL separated, the result needs the same room.
+	langs = alloc(bufsize);
+	if (langs != NULL)
+	{
+	    char_u	*d = langs;
+	    WCHAR	*s = buffer;
+
+	    while (*s != L'\0')
+	    {
+		bool	english = s[0] == L'e' && s[1] == L'n'
+					&& (s[2] == L'\0' || s[2] == L'-');
+
+		if (d > langs)
+		    *d++ = ':';
+		// Locale names are ASCII, "en-US" becomes "en_US".
+		for ( ; *s != L'\0'; ++s)
+		    *d++ = *s == L'-' ? '_' : (char_u)*s;
+		++s;
+
+		if (english)
+		    break;
+	    }
+	    *d = NUL;
+	}
+    }
+    vim_free(buffer);
+
+    return langs;
+}
+#endif
+
 /*
  * Initialize the 'LANG' environment variable to a default value.
  */
@@ -501,32 +559,27 @@ set_init_expand_env(void)
 set_init_lang_env(void)
 {
 #if defined(MSWIN) && defined(FEAT_GETTEXT)
-    // If $LANG isn't set, try to get a good value for it.  This makes the
-    // right language be used automatically.  Don't do this for English.
-    if (mch_getenv((char_u *)"LANG") == NULL)
+    // If the language isn't set in the environment, use the display language
+    // of Windows.  Not the regional format, which is what the CRT would use
+    // for setlocale(LC_ALL, "").
+    if (mch_getenv((char_u *)"LANG") == NULL
+	    && mch_getenv((char_u *)"LANGUAGE") == NULL
+	    && mch_getenv((char_u *)"LC_ALL") == NULL
+	    && mch_getenv((char_u *)"LC_MESSAGES") == NULL)
     {
-	char	buf[20];
-	long_u	n;
+	char_u	*langs = get_ui_langs();
 
-	// Could use LOCALE_SISO639LANGNAME, but it's not in Win95.
-	// LOCALE_SABBREVLANGNAME gives us three letters, like "enu", we use
-	// only the first two.
-	n = GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_SABBREVLANGNAME,
-							     (LPTSTR)buf, 20);
-	if (n >= 2 && STRNICMP(buf, "en", 2) != 0)
+	if (langs != NULL && *langs != NUL)
 	{
-	    // There are a few exceptions (probably more)
-	    if (STRNICMP(buf, "cht", 3) == 0 || STRNICMP(buf, "zht", 3) == 0)
-		STRCPY(buf, "zh_TW");
-	    else if (STRNICMP(buf, "chs", 3) == 0
-					      || STRNICMP(buf, "zhc", 3) == 0)
-		STRCPY(buf, "zh_CN");
-	    else if (STRNICMP(buf, "jp", 2) == 0)
-		STRCPY(buf, "ja");
-	    else
-		buf[2] = NUL;		// truncate to two-letter code
-	    vim_setenv((char_u *)"LANG", (char_u *)buf);
+	    char_u	*colon = vim_strchr(langs, ':');
+
+	    // $LANGUAGE is the list gettext picks from, $LANG the language.
+	    vim_setenv((char_u *)"LANGUAGE", langs);
+	    if (colon != NULL)
+		*colon = NUL;
+	    vim_setenv((char_u *)"LANG", langs);
 	}
+	vim_free(langs);
     }
 #elif defined(MACOS_CONVERT)
     // Moved to os_mac_conv.c to avoid dependency problems.
@@ -671,7 +724,7 @@ set_init_1(int clean_arg)
     set_init_default_maxmemtot();
     set_init_default_cdpath();
     set_init_default_printencoding();
-#ifdef FEAT_POSTSCRIPT
+#if defined(FEAT_POSTSCRIPT) || defined(FEAT_PRINT_PANGO)
     set_init_default_printexpr();
 #endif
 
@@ -3435,6 +3488,9 @@ insecure_flag(win_T *wp, int opt_idx, int opt_flags)
 	    case PV_FEX:	return &wp->w_buffer->b_p_fex_flags;
 #  ifdef FEAT_FIND_ID
 	    case PV_INEX:	return &wp->w_buffer->b_p_inex_flags;
+#  endif
+#  ifdef FEAT_COMPL_FUNC
+	    case PV_CPT:	return &wp->w_buffer->b_p_cpt_flags;
 #  endif
 # endif
 	}
@@ -6539,6 +6595,12 @@ makeset(FILE *fd, int opt_flags, int local_only)
 		    int		do_endif = FALSE;
 		    bool	legacy;
 
+		    // Ignore those options associated to lambda expressions because
+		    // persistence makes no sense for them.
+		    if ((p->flags & P_FUNC) && *(char_u **)varp != NULL
+			    && strstr(*(char **)varp, "<lambda>") != NULL)
+			continue;
+
 #ifdef FEAT_EVAL
 		    legacy = !is_option_value_vim9(p - &options[0],
 			    round == 1 ? opt_flags | OPT_GLOBAL : OPT_LOCAL);
@@ -7409,6 +7471,47 @@ get_option_fullname(int opt_idx)
 {
     return (char_u *)options[opt_idx].fullname;
 }
+
+/*
+ * Add what getinfo() reports for the option "name" to "d".  "available" tells
+ * whether the option is supported in this Vim.
+ * Returns FAIL when there is no such option.
+ */
+    int
+option_info(char_u *name, dict_T *d)
+{
+    int			opt_idx;
+    struct vimoption	*p;
+    int			dvi;
+
+    // The "g:" or "l:" scope does not matter for the definition.
+    if ((name[0] == 'g' || name[0] == 'l') && name[1] == ':')
+	name += 2;
+    opt_idx = findoption(name);
+    if (opt_idx < 0)
+	return FAIL;
+
+    p = &options[opt_idx];
+    dict_add_string(d, "name", (char_u *)p->fullname);
+    dict_add_string(d, "shortname",
+		    (char_u *)(p->shortname == NULL ? "" : p->shortname));
+    dict_add_bool(d, "available", p->var != NULL);
+    dict_add_string(d, "type", (char_u *)((p->flags & P_BOOL) ? "bool"
+				: (p->flags & P_NUM) ? "number" : "string"));
+    dict_add_string(d, "scope", (char_u *)(p->indir == PV_NONE ? "global"
+		: (p->indir & PV_BOTH)
+		    ? ((p->indir & PV_WIN) ? "global-window" : "global-buffer")
+		    : ((p->indir & PV_WIN) ? "window" : "buffer")));
+    dvi = (p->flags & P_VI_DEF) ? VI_DEFAULT : VIM_DEFAULT;
+    if (p->flags & P_BOOL)
+	dict_add_bool(d, "default", (int)(long_i)p->def_val[dvi]);
+    else if (p->flags & P_NUM)
+	dict_add_number(d, "default", (long)(long_i)p->def_val[dvi]);
+    else
+	dict_add_string(d, "default", p->def_val[dvi] == NULL
+					? (char_u *)"" : p->def_val[dvi]);
+    return OK;
+}
 #endif
 
 /*
@@ -7733,6 +7836,8 @@ clear_winopt(winopt_T *wop UNUSED)
 // Index into the options table for a buffer-local option enum.
 static int buf_opt_idx[BV_COUNT];
 # define COPY_OPT_SCTX(buf, bv) buf->b_p_script_ctx[bv] = options[buf_opt_idx[bv]].script_ctx
+# define COPY_OPT_INSECURE(flagsfield, bv) \
+	(flagsfield) = (options[buf_opt_idx[bv]].flags & P_INSECURE)
 
 /*
  * Initialize buf_opt_idx[] if not done already.
@@ -7752,6 +7857,7 @@ init_buf_opt_idx(void)
 }
 #else
 # define COPY_OPT_SCTX(buf, bv)
+# define COPY_OPT_INSECURE(flagsfield, bv)
 #endif
 
 /*
@@ -7874,6 +7980,7 @@ buf_copy_options(buf_T *buf, int flags)
 	    buf->b_p_cpt = vim_strsave(p_cpt);
 	    COPY_OPT_SCTX(buf, BV_CPT);
 #ifdef FEAT_COMPL_FUNC
+	    COPY_OPT_INSECURE(buf->b_p_cpt_flags, BV_CPT);
 	    set_buflocal_cpt_callbacks(buf);
 #endif
 #ifdef BACKSLASH_IN_FILENAME
@@ -7967,6 +8074,7 @@ buf_copy_options(buf_T *buf, int flags)
 #if defined(FEAT_EVAL)
 	    buf->b_p_inde = vim_strsave(p_inde);
 	    COPY_OPT_SCTX(buf, BV_INDE);
+	    COPY_OPT_INSECURE(buf->b_p_inde_flags, BV_INDE);
 	    buf->b_p_indk = vim_strsave(p_indk);
 	    COPY_OPT_SCTX(buf, BV_INDK);
 #endif
@@ -7974,6 +8082,7 @@ buf_copy_options(buf_T *buf, int flags)
 #if defined(FEAT_EVAL)
 	    buf->b_p_fex = vim_strsave(p_fex);
 	    COPY_OPT_SCTX(buf, BV_FEX);
+	    COPY_OPT_INSECURE(buf->b_p_fex_flags, BV_FEX);
 #endif
 #ifdef FEAT_CRYPT
 	    buf->b_p_key = vim_strsave(p_key);
@@ -8028,6 +8137,7 @@ buf_copy_options(buf_T *buf, int flags)
 # ifdef FEAT_EVAL
 	    buf->b_p_inex = vim_strsave(p_inex);
 	    COPY_OPT_SCTX(buf, BV_INEX);
+	    COPY_OPT_INSECURE(buf->b_p_inex_flags, BV_INEX);
 # endif
 #endif
 	    buf->b_p_cot = empty_option;

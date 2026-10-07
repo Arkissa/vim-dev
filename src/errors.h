@@ -569,7 +569,7 @@ EXTERN char e_font_str_is_not_fixed_width[]
 	INIT(= N_("E236: Font \"%s\" is not fixed-width"));
 # endif
 #endif
-#ifdef MSWIN
+#if defined(MSWIN) || defined(FEAT_PRINT_PANGO)
 EXTERN char e_printer_selection_failed[]
 	INIT(= N_("E237: Printer selection failed"));
 EXTERN char e_print_error_str[]
@@ -815,7 +815,7 @@ EXTERN char e_line_number_out_of_range_nr_past_the_end[]
 	INIT(= "E322: Line number out of range: %ld past the end");
 EXTERN char e_line_count_wrong_in_block_nr[]
 	INIT(= "E323: Line count wrong in block %ld");
-#ifdef FEAT_POSTSCRIPT
+#if defined(FEAT_POSTSCRIPT) || defined(FEAT_PRINT_PANGO)
 EXTERN char e_cant_open_postscript_output_file[]
 	INIT(= N_("E324: Can't open PostScript output file"));
 #endif
@@ -915,7 +915,7 @@ EXTERN char e_pattern_uses_more_memory_than_maxmempattern[]
 EXTERN char e_library_call_failed_for_str[]
 	INIT(= N_("E364: Library call failed for \"%s()\""));
 #endif
-#ifdef FEAT_POSTSCRIPT
+#if defined(FEAT_POSTSCRIPT) || defined(FEAT_PRINT_PANGO)
 EXTERN char e_failed_to_print_postscript_file[]
 	INIT(= N_("E365: Failed to print PostScript file"));
 #endif
@@ -1189,7 +1189,8 @@ EXTERN char e_invalid_argument_str[]
 	INIT(= N_("E475: Invalid argument: %s"));
 EXTERN char e_invalid_value_for_argument_str[]
 	INIT(= N_("E475: Invalid value for argument %s"));
-#if defined(FEAT_JOB_CHANNEL) || defined(FEAT_PROP_POPUP) || defined(FEAT_EVAL)
+#if defined(FEAT_JOB_CHANNEL) || defined(FEAT_PROP_POPUP) \
+	|| defined(FEAT_EVAL) || defined(FEAT_IMAGE)
 EXTERN char e_invalid_value_for_argument_str_str[]
 	INIT(= N_("E475: Invalid value for argument %s: %s"));
 #endif
@@ -1568,7 +1569,7 @@ EXTERN char e_using_special_as_number[]
 EXTERN char e_too_many_signs_defined[]
 	INIT(= N_("E612: Too many signs defined"));
 #endif
-#if defined(MSWIN) && defined(FEAT_PRINTER)
+#if defined(FEAT_PRINTER) && (defined(MSWIN) || defined(FEAT_PRINT_PANGO))
 EXTERN char e_unknown_printer_font_str[]
 	INIT(= N_("E613: Unknown printer font: %s"));
 #endif
@@ -3821,4 +3822,24 @@ EXTERN char e_completeopt_escape_cannot_be_used_with_nargs_underscore[]
 #ifdef FEAT_PROP_POPUP
 EXTERN char e_too_many_text_properties_on_a_single_line[]
 	INIT(= N_("E1580: Too many text properties on a single line"));
+#endif
+#ifdef FEAT_EVAL
+EXTERN char e_cannot_extend_null_blob[]
+	INIT(= N_("E1581: Cannot extend a null blob"));
+#endif
+#ifdef FEAT_JOB_CHANNEL
+EXTERN char e_not_started_with_stdio_channel[]
+	INIT(= N_("E1582: Not started with --stdio-channel"));
+EXTERN char e_cannot_open_stdio_channel[]
+	INIT(= N_("E1583: Cannot open stdio channel"));
+#endif
+#ifdef FEAT_IMAGE
+EXTERN char e_invalid_image_dimensions[]
+	INIT(= N_("E1584: Image dimensions are invalid"));
+EXTERN char e_no_image_backend_available[]
+	INIT(= N_("E1585: No image backend available"));
+EXTERN char e_changing_image_backend_failed[]
+	INIT(= N_("E1586: Failed changing image backends"));
+EXTERN char e_image_id_nr_does_not_exist[]
+	INIT(= N_("E1587: Image ID %d does not exist"));
 #endif

@@ -809,11 +809,19 @@ dict2string(typval_T *tv, int copyID, int restore_copyID)
     char_u	*s;
     dict_T	*d;
     int		todo;
+    int		prev_lock;
 
     if ((d = tv->vval.v_dict) == NULL)
 	return NULL;
     ga_init2(&ga, sizeof(char), 80);
     ga_append(&ga, '{');
+
+    // Lock the dict, the string() method of an object item could remove an
+    // item or make the hashtab resize while we iterate over it.
+    prev_lock = d->dv_lock;
+    if (d->dv_lock == 0)
+	d->dv_lock = VAR_LOCKED;
+    hash_lock(&d->dv_hashtab);
 
     todo = (int)d->dv_hashtab.ht_used;
     FOR_ALL_HASHTAB_ITEMS(&d->dv_hashtab, hi, todo)
@@ -845,6 +853,8 @@ dict2string(typval_T *tv, int copyID, int restore_copyID)
 
 	}
     }
+    hash_unlock(&d->dv_hashtab);
+    d->dv_lock = prev_lock;
     if (todo > 0)
     {
 	vim_free(ga.ga_data);
@@ -1557,6 +1567,7 @@ typedef enum {
     static void
 dict2list(typval_T *argvars, typval_T *rettv, dict2list_T what)
 {
+    list_T	*l;
     list_T	*l2;
     dictitem_T	*di;
     hashitem_T	*hi;
@@ -1564,29 +1575,37 @@ dict2list(typval_T *argvars, typval_T *rettv, dict2list_T what)
     dict_T	*d;
     int		todo;
 
-    if (rettv_list_alloc(rettv) == FAIL)
-	return;
-
     if (check_for_dict_arg(argvars, 0) == FAIL)
+    {
+	// invalid argument, return an empty list
+	(void)rettv_list_alloc(rettv);
 	return;
+    }
 
+    // NULL dict behaves like an empty dict
     d = argvars[0].vval.v_dict;
-    if (d == NULL)
-	// NULL dict behaves like an empty dict
+    todo = d == NULL ? 0 : (int)d->dv_hashtab.ht_used;
+
+    // The number of items is known, allocate the list and all its items in
+    // one go for efficiency.
+    l = list_alloc_with_items(todo);
+    if (l == NULL)
+    {
+	(void)rettv_list_alloc(rettv);
+	return;
+    }
+    rettv_list_set(rettv, l);
+    if (todo == 0)
+	// NULL or empty dict, return the empty list
 	return;
 
-    todo = (int)d->dv_hashtab.ht_used;
+    li = l->lv_first;
     FOR_ALL_HASHTAB_ITEMS(&d->dv_hashtab, hi, todo)
     {
 	if (!HASHITEM_EMPTY(hi))
 	{
 	    --todo;
 	    di = HI2DI(hi);
-
-	    li = listitem_alloc();
-	    if (li == NULL)
-		break;
-	    list_append(rettv->vval.v_list, li);
 
 	    if (what == DICT2LIST_KEYS)
 	    {
@@ -1603,20 +1622,30 @@ dict2list(typval_T *argvars, typval_T *rettv, dict2list_T what)
 	    else
 	    {
 		// items()
-		l2 = list_alloc();
+		l2 = list_alloc_with_items(2);
 		li->li_tv.v_type = VAR_LIST;
 		li->li_tv.v_lock = 0;
 		li->li_tv.vval.v_list = l2;
 		if (l2 == NULL)
-		    break;
+		    goto alloc_failed;
 		++l2->lv_refcount;
 
-		if (list_append_string(l2, di->di_key, -1) == FAIL
-			|| list_append_tv(l2, &di->di_tv) == FAIL)
-		    break;
+		l2->lv_first->li_tv.v_type = VAR_STRING;
+		l2->lv_first->li_tv.vval.v_string = vim_strsave(di->di_key);
+		if (l2->lv_first->li_tv.vval.v_string == NULL)
+		    goto alloc_failed;
+		copy_tv(&di->di_tv, &l2->lv_u.mat.lv_last->li_tv);
 	    }
+	    li = li->li_next;
 	}
     }
+    return;
+
+alloc_failed:
+    // On a memory allocation failure some of the pre-allocated items may be
+    // left unset; free the whole list and return an empty one instead.
+    list_unref(l);
+    (void)rettv_list_alloc(rettv);
 }
 
 /*
